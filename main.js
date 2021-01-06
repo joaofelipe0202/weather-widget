@@ -1,4 +1,19 @@
 const apiKey = '582b05f499f2639f9df696b6c1a8623c';
+const days = {
+  0: "Sunday",
+  1: "Monday",
+  2: "Tuesday",
+  3: "Wednesday",
+  4: "Thursday",
+  5: "Friday",
+  6: "Saturday",
+}
+
+navigator.geolocation.getCurrentPosition(position => {
+  getCurrentWeatherConditions(position.coords.latitude, position.coords.longitude);
+  getTheNext5DaysForecast(position.coords.latitude, position.coords.longitude);
+});
+
 
 const getCurrentWeatherConditions = (lat, lon) => {
   return fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}`)
@@ -25,11 +40,6 @@ const updateWeatherConditions = currentWeather => {
   currentConditions.insertAdjacentHTML('afterbegin', currentWeatherInfo);
 }
 
-navigator.geolocation.getCurrentPosition(position => {
-  getCurrentWeatherConditions(position.coords.latitude, position.coords.longitude);
-  getTheNext5DaysForecast(position.coords.latitude, position.coords.longitude);
-});
-
 const getTheNext5DaysForecast = (lat, lon) => {
   return fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}`)
     .then(response => {
@@ -39,55 +49,38 @@ const getTheNext5DaysForecast = (lat, lon) => {
         Promise.reject({response: response.status, response: response.statusText});
       }
     })
-    .then(weathers => {
-      const weathersData = [];
-      let forecast = weathers.list.filter(timeSlot => new Date(timeSlot.dt_txt).getDate() !== new Date().getDate());
-      forecast.forEach(timeSlot => {
-        timeSlot.weekday = new Intl.DateTimeFormat('en-US', { weekday: `long` }).format(new Date(timeSlot.dt_txt));
-      });
-
-      for (let x = 0; x < 5; x++) {
-        weathersData[weathersData.length] = { 
-          day: forecast[0].weekday,
-          weathers: forecast.filter(timeSlot => timeSlot.weekday === forecast[0].weekday)
-        };
-
-        forecast = forecast.filter(timeSlot => timeSlot.weekday !== weathersData[weathersData.length - 1].day);
-      }
-      
-      return weathersData;
-    })
-    .then(data => {
-      getHighAndLowTemperatures(data);
-      update5DaysWeatherConditions(data);
+    .then(weatherData => {
+      getNext5DaysForecastInfo(weatherData.list);
     })
 }
 
-const getHighAndLowTemperatures = temperatures => {
-  temperatures.forEach(weekDay => {
-    weekDay.weathers.forEach(temperature => {
-      if (temperature.main['temp_max'] > weekDay.high) {
-        weekDay.high = temperature.main['temp_max'];
-      }
-      if (temperature.main['temp_min'] < weekDay.low) {
-        weekDay.low = temperature.main['temp_min'];
-      }
-    })
-  })
-}
-
-const update5DaysWeatherConditions = nextWeatherCondition => {
+const getNext5DaysForecastInfo = weatherData => {
   const nextForecast = document.querySelector('.forecast');
+  let weekDays = [];
+  let highTemp = [];
+  let lowTemp = [];
 
-  nextWeatherCondition.forEach(weekDay => {
-    const nextWeatherInfo = 
+  weatherData.forEach(weatherCondition => {
+    let currentDay = new Date(weatherCondition.dt_txt);
+    if(weekDays[currentDay.toDateString(weatherCondition.dt_txt)] === undefined) {
+      weekDays[currentDay.toDateString(weatherCondition.dt_txt)] = [weatherCondition];
+      highTemp[currentDay.toDateString(weatherCondition.dt_txt)] = [weatherCondition.main.temp_max];
+      lowTemp[currentDay.toDateString(weatherCondition.dt_txt)] = [weatherCondition.main.temp_min];
+    } else {
+      weekDays[currentDay.toDateString(weatherCondition.dt_txt)].push(weatherCondition);
+      highTemp[currentDay.toDateString(weatherCondition.dt_txt)].push(weatherCondition.main.temp_max);
+      lowTemp[currentDay.toDateString(weatherCondition.dt_txt)].push(weatherCondition.main.temp_min);
+    }
+    if (currentDay.toLocaleTimeString() === "12:00:00 PM") {
+      const nextWeatherInfo = 
       `<div class="day">
-      <h3>${weekDay.day}</h3>
-      <img src="http://openweathermap.org/img/wn/${weekDay.weathers[3].weather[0].icon}@2x.png" />
-      <div class="description">${weekDay.weathers[3].weather[0].description}</div>
+      <h3>${days[currentDay.getDay()]}</h3>
+      <img src="http://openweathermap.org/img/wn/${weatherCondition.weather[0].icon}@2x.png" />
+      <div class="description">${weatherCondition.weather[0].description}</div>
       <div class="temp">
-        <span class="high">${Math.round(weekDay.main['temp_max'] - 273)}℃</span>/<span class="low">${Math.round(weekDay.main['temp_min'] - 273)}℃</span>
+        <span class="high">${parseInt(highTemp[currentDay.toDateString(weatherCondition.dt_txt)]) - 273}℃</span>/<span class="low">${parseInt((lowTemp[currentDay.toDateString(weatherCondition.dt_txt)])) - 273}℃</span>
       </div>`;
-    nextForecast.insertAdjacentHTML('afterbegin', nextWeatherInfo);
-  })
+      nextForecast.insertAdjacentHTML('afterbegin', nextWeatherInfo);
+    }
+  })  
 }
